@@ -2,3 +2,5 @@
 node_modules/
 dist/
 *.wasm
+secrets.yaml
+pegcheck-workflow/.cre_build_tmp.js
