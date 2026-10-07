@@ -17,8 +17,9 @@ import {
   decodeFunctionResult,
 } from "viem"
 import { decide } from "./lib/agent/rules.js"
-import type { Evidence, HistoryStats } from "./lib/agent/rules.js"
-import { DIP_ZONE_START_PCT } from "./lib/agent/config.js"
+import type { Evidence } from "./lib/agent/rules.js"
+import { summariseHistory, buildHistoryStats } from "./lib/agent/history.js"
+import type { HistoryEntry, ApiSummary } from "./lib/agent/history.js"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -35,11 +36,6 @@ type PricesApiResponse = {
   sources: Record<string, Record<string, number>>
 }
 
-type HistoryEntry = {
-  created_at: string
-  price: number
-}
-
 type HistoryApiResponse = {
   history: HistoryEntry[]
 }
@@ -49,19 +45,6 @@ type HistoryApiResponse = {
 // of the ~70 KB of raw 3-day history entries that would exceed the 25 KB limit.
 type ConsensusPayload = {
   v: string  // JSON-encoded ApiSummary — single-field wrapper for identical aggregation
-}
-
-type ApiSummary = {
-  medianPrice: number
-  sources: Record<string, number>    // non-zero per-source prices
-  latestPrice: number
-  latestTs: number
-  oldestTs: number
-  price1hAgo: number | null
-  price24hAgo: number | null
-  low24h: number | null              // lowest price in last 24 h
-  lastAtPegTs: number | null         // newest ts when |price-1|/1 < 0.5%
-  historyCount: number
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -86,75 +69,6 @@ function uint8ArrayToHex(bytes: Uint8Array): `0x${string}` {
 function hexToBase64(hex: string): string {
   const h = hex.startsWith("0x") ? hex.slice(2) : hex
   return Buffer.from(h, "hex").toString("base64")
-}
-
-function summariseHistory(history: HistoryEntry[], nowMs: number): Omit<ApiSummary, "medianPrice" | "sources"> {
-  if (history.length === 0) {
-    return {
-      latestPrice: 0, latestTs: nowMs, oldestTs: nowMs,
-      price1hAgo: null, price24hAgo: null, low24h: null,
-      lastAtPegTs: null, historyCount: 0,
-    }
-  }
-
-  const sorted = history
-    .map(e => ({ ts: Date.parse(e.created_at), price: e.price }))
-    .sort((a, b) => a.ts - b.ts)
-
-  const oneHAgo = nowMs - 60 * 60 * 1000
-  const dayAgo  = nowMs - 24 * 60 * 60 * 1000
-
-  let price1hAgo:  number | null = null;  let minD1h  = Infinity
-  let price24hAgo: number | null = null;  let minD24h = Infinity
-  let low24h = Infinity
-  let lastAtPegTs: number | null = null
-
-  for (const e of sorted) {
-    const d1h  = Math.abs(e.ts - oneHAgo)
-    if (d1h  < minD1h)  { minD1h  = d1h;  price1hAgo  = e.price }
-    const d24h = Math.abs(e.ts - dayAgo)
-    if (d24h < minD24h) { minD24h = d24h; price24hAgo = e.price }
-    if (e.ts >= dayAgo && e.price < low24h) low24h = e.price
-    if (Math.abs(e.price - USDC_PEG) / USDC_PEG < DIP_ZONE_START_PCT) {
-      if (lastAtPegTs === null || e.ts > lastAtPegTs) lastAtPegTs = e.ts
-    }
-  }
-
-  return {
-    latestPrice:  sorted[sorted.length - 1]!.price,
-    latestTs:     sorted[sorted.length - 1]!.ts,
-    oldestTs:     sorted[0]!.ts,
-    price1hAgo,
-    price24hAgo,
-    low24h:       low24h < Infinity ? low24h : null,
-    lastAtPegTs,
-    historyCount: sorted.length,
-  }
-}
-
-function buildHistoryStats(s: ApiSummary, nowMs: number): HistoryStats {
-  if (s.historyCount === 0) {
-    return {
-      hoursOffPeg: null, change1hPct: null, change24hPct: null,
-      bounceFromLowPct: null, pctBelow7d: null, daysOfData: null,
-    }
-  }
-  return {
-    hoursOffPeg:      s.lastAtPegTs !== null
-                        ? (nowMs - s.lastAtPegTs) / (1000 * 60 * 60)
-                        : 25,
-    change1hPct:      s.price1hAgo !== null && s.price1hAgo > 0
-                        ? (s.latestPrice - s.price1hAgo) / s.price1hAgo
-                        : null,
-    change24hPct:     s.price24hAgo !== null && s.price24hAgo > 0
-                        ? (s.latestPrice - s.price24hAgo) / s.price24hAgo
-                        : null,
-    bounceFromLowPct: s.low24h !== null && s.low24h > 0
-                        ? (s.latestPrice - s.low24h) / s.low24h
-                        : null,
-    pctBelow7d:       null,
-    daysOfData:       null,
-  }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────

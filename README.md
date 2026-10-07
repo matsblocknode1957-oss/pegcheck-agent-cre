@@ -77,6 +77,36 @@ Buy params: entry=$0.988000  tp=$0.997996  sl=$0.958360  size=$1000
 
 ---
 
+## SVB crash replay (March 2023)
+
+A backtest script runs the exact same `decide()` and `checkExit()` rules over real hourly USDC prices from the Silicon Valley Bank collapse, hour by hour, with pretend money.
+
+**How to run:**
+
+```bash
+cd pegcheck-workflow
+bun replay          # fetches live historical data then writes replay/usdc-2023-03.csv
+```
+
+**Data sources:** Bitstamp USDCUSD and Bitfinex USDCUSD (both USD-quoted). Chainlink on-chain prices are not included — they require an archive RPC node. Kraken and Coinbase were tested and rejected (Kraken's OHLC API returns only recent candles; Coinbase's public endpoint returns 404).
+
+**Exit method:** stop-loss is tested against the hourly candle low (median of both sources); take-profit is tested against the hourly high. If both thresholds are crossed in the same candle, the stop-loss is assumed to hit first (worst case). Exit prices are pinned to the threshold level, not the raw low or high.
+
+**What the agent did:**
+
+| Time (UTC) | Event |
+|---|---|
+| 11 Mar 03:00 | First AVOID — Bitfinex already at $0.960 while Bitstamp held $0.997; sources disagreed by 3.75%, danger +25 |
+| 11 Mar 07:00 | Lowest point — median $0.869 (13.1% off peg), sources still split, danger 100/100 |
+| 11 Mar 08:00–18:00 | AVOID throughout recovery attempt — deep depeg (>5%), sources periodically disagreed, still falling |
+| 11 Mar 19:00 | **BUY at $0.950** — price back inside the 0.5%–5% dip zone, Bitstamp and Bitfinex within 0.92% of each other, 1-hour change turned positive, 10.7% above the day's low; danger 0/100, opportunity 100/100 |
+| 13 Mar 16:00 | **Take-profit hit at $0.998** — hourly high crossed the $0.998 threshold; trade closed |
+| **Result** | **+$50.05 on $1,000 pretend money** (5.0% in ~68 hours) |
+
+One historical event, not proof of future results. The agent could easily have been stopped out if the low had dipped below $0.922 during the volatile March 12 consolidation; the closest call was $0.944 on March 12 07:00.
+
+---
+
 ## Live version
 
 The CRE workflow here is a simulation for the hackathon and does not record trades. The same rules run live inside PegCheck (pegcheck.uk) on its own scheduled job every few minutes, recording practice trades with pretend money to a database, so the agent builds a real track record.

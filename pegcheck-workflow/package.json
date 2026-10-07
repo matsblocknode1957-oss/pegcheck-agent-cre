@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "postinstall": "bunx cre-setup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "replay": "bun run replay/replay-usdc-2023.ts"
   },
   "dependencies": {
     "@chainlink/cre-sdk": "^1.6.0",
