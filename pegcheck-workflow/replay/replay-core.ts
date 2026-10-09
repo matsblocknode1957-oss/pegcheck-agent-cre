@@ -48,29 +48,37 @@ export type ReplayResult = {
 }
 
 export type ReplayConfig = {
-  candles:             Candle[]
-  stopPct:             number | null  // null = no stop-loss
-  maxDays:             number | null  // null = no timeout
-  peg?:                number
-  coin?:               string
-  relaxSourceCheck?:   boolean        // single-source what-if: echo lone source so sourcesAgree fires
-  stopLossCooldown?:   boolean        // Rule A: block buy for 48 h after a stop-loss exit
-  suppressRepeatDip?:  boolean        // baseline testing: override hadPriorDipCycle to null
+  candles:                Candle[]
+  stopPct:                number | null  // null = no stop-loss
+  maxDays:                number | null  // null = no timeout
+  peg?:                   number
+  coin?:                  string
+  relaxSourceCheck?:      boolean        // single-source what-if: echo lone source so sourcesAgree fires
+  stopLossCooldown?:      boolean        // Rule A: block buy for 48 h after a stop-loss exit
+  suppressRepeatDip?:     boolean        // baseline testing: override hadPriorDipCycle to null
+  takeProfitDistancePct?: number         // override TP threshold (default: TAKE_PROFIT_DISTANCE_PCT)
+  dipZoneStartPct?:       number         // override dip zone start passed to decide()
+  quickProfitPct?:        number         // also exit when price is this % above entry (whichever TP fires first)
 }
 
-function conservativeExit(
-  trade:       OpenTrade,
-  closeMedian: number,
-  lowMedian:   number,
-  highMedian:  number,
-  now:         Date,
-  stopPct:     number | null,
-  maxDays:     number | null,
+export function conservativeExit(
+  trade:                 OpenTrade,
+  closeMedian:           number,
+  lowMedian:             number,
+  highMedian:            number,
+  now:                   Date,
+  stopPct:               number | null,
+  maxDays:               number | null,
+  takeProfitDistancePct: number = TAKE_PROFIT_DISTANCE_PCT,
+  quickProfitPct?:       number,
 ): { status: ExitStatus; exitPrice: number; profitUsd: number } {
   const { peg, entry, sizeUsd, openedAt } = trade
-  const units   = sizeUsd / entry
-  const tp      = peg * (1 - TAKE_PROFIT_DISTANCE_PCT)
-  const sl      = stopPct !== null ? entry * (1 - stopPct) : null
+  const units    = sizeUsd / entry
+  const normalTp = peg * (1 - takeProfitDistancePct)
+  const tp       = quickProfitPct !== undefined
+    ? Math.min(normalTp, entry * (1 + quickProfitPct))
+    : normalTp
+  const sl       = stopPct !== null ? entry * (1 - stopPct) : null
   const elapsed = now.getTime() - openedAt.getTime()
   const pnl     = (p: number) => units * p - sizeUsd
 
@@ -91,9 +99,12 @@ export function runReplay({
   maxDays,
   peg  = 1.0,
   coin = "STABLE",
-  relaxSourceCheck  = false,
-  stopLossCooldown  = false,
-  suppressRepeatDip = false,
+  relaxSourceCheck      = false,
+  stopLossCooldown      = false,
+  suppressRepeatDip     = false,
+  takeProfitDistancePct = TAKE_PROFIT_DISTANCE_PCT,
+  dipZoneStartPct,
+  quickProfitPct,
 }: ReplayConfig): ReplayResult {
   const trades:       TradeRecord[] = []
   const candleStates: CandleState[] = []
@@ -137,7 +148,7 @@ export function runReplay({
 
     if (openTrade !== null) {
       const exit = conservativeExit(
-        openTrade, c.median, c.low_median, c.high_median, new Date(nowMs), stopPct, maxDays,
+        openTrade, c.median, c.low_median, c.high_median, new Date(nowMs), stopPct, maxDays, takeProfitDistancePct, quickProfitPct,
       )
       pnlUsd    = exit.profitUsd
       exitPrice = exit.exitPrice
@@ -167,7 +178,7 @@ export function runReplay({
       openPositionsCount:       openTrade !== null ? 1 : 0,
       history:                  histStats,
     }
-    const result = decide(evidence)
+    const result = decide(evidence, dipZoneStartPct !== undefined ? { dipZoneStartPct } : {})
 
     const inCooldown = stopLossCooldown && lastStopLossExitMs !== null
       && (nowMs - lastStopLossExitMs) < COOLDOWN_48H_MS

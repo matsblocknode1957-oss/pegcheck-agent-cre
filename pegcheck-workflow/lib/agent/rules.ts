@@ -81,7 +81,37 @@ function priceSpread(prices: Record<string, number>): number {
   return (hi - lo) / lo;
 }
 
-export function decide(evidence: Evidence): DecideResult {
+export interface DecideOverrides {
+  dipZoneStartPct?:         number
+  deepDepegPct?:            number
+  takeProfitDistancePct?:   number
+  stopLossPct?:             number
+  sourceDisagreeSpreadPct?: number
+  chronicHours?:            number
+  freshDipHours?:           number
+  fallingFastPct?:          number
+  fallingPct?:              number
+  bouncePct?:               number
+  minHistoryDays?:          number
+  maxOpenPositions?:        number
+  maxPositionUsd?:          number
+}
+
+export function decide(evidence: Evidence, overrides: DecideOverrides = {}): DecideResult {
+  const _DIP_ZONE_START_PCT       = overrides.dipZoneStartPct         ?? DIP_ZONE_START_PCT;
+  const _DEEP_DEPEG_PCT           = overrides.deepDepegPct            ?? DEEP_DEPEG_PCT;
+  const _TAKE_PROFIT_DISTANCE_PCT = overrides.takeProfitDistancePct   ?? TAKE_PROFIT_DISTANCE_PCT;
+  const _STOP_LOSS_PCT            = overrides.stopLossPct             ?? STOP_LOSS_PCT;
+  const _SOURCE_DISAGREE_SPREAD_PCT = overrides.sourceDisagreeSpreadPct ?? SOURCE_DISAGREE_SPREAD_PCT;
+  const _CHRONIC_HOURS            = overrides.chronicHours            ?? CHRONIC_HOURS;
+  const _FRESH_DIP_HOURS          = overrides.freshDipHours           ?? FRESH_DIP_HOURS;
+  const _FALLING_FAST_PCT         = overrides.fallingFastPct          ?? FALLING_FAST_PCT;
+  const _FALLING_PCT              = overrides.fallingPct              ?? FALLING_PCT;
+  const _BOUNCE_PCT               = overrides.bouncePct               ?? BOUNCE_PCT;
+  const _MIN_HISTORY_DAYS         = overrides.minHistoryDays          ?? MIN_HISTORY_DAYS;
+  const _MAX_OPEN_POSITIONS       = overrides.maxOpenPositions        ?? MAX_OPEN_POSITIONS;
+  const _MAX_POSITION_USD         = overrides.maxPositionUsd          ?? MAX_POSITION_USD;
+
   const {
     peg,
     medianPrice,
@@ -95,10 +125,10 @@ export function decide(evidence: Evidence): DecideResult {
   const depegPct = (peg - medianPrice) / peg;
   const sourceCount = Object.values(pricesBySource).length;
   const spread = priceSpread(pricesBySource);
-  const sourcesAgree = sourceCount >= 2 && spread < SOURCE_DISAGREE_SPREAD_PCT;
-  const isDeepDepeg = depegPct > DEEP_DEPEG_PCT;
-  const isInDipZone = depegPct >= DIP_ZONE_START_PCT && depegPct <= DEEP_DEPEG_PCT;
-  const atMaxPositions = openPositionsCount >= MAX_OPEN_POSITIONS;
+  const sourcesAgree = sourceCount >= 2 && spread < _SOURCE_DISAGREE_SPREAD_PCT;
+  const isDeepDepeg = depegPct > _DEEP_DEPEG_PCT;
+  const isInDipZone = depegPct >= _DIP_ZONE_START_PCT && depegPct <= _DEEP_DEPEG_PCT;
+  const atMaxPositions = openPositionsCount >= _MAX_OPEN_POSITIONS;
 
   const danger: ScoredCase = { score: 0, reasons: [] };
   const opportunity: ScoredCase = { score: 0, reasons: [] };
@@ -108,7 +138,7 @@ export function decide(evidence: Evidence): DecideResult {
   if (isDeepDepeg) {
     danger.score += 50;
     danger.reasons.push(
-      `Price is ${(depegPct * 100).toFixed(1)}% below peg — deep depeg (limit is ${(DEEP_DEPEG_PCT * 100).toFixed(0)}%)`
+      `Price is ${(depegPct * 100).toFixed(1)}% below peg — deep depeg (limit is ${(_DEEP_DEPEG_PCT * 100).toFixed(0)}%)`
     );
   }
 
@@ -118,7 +148,7 @@ export function decide(evidence: Evidence): DecideResult {
   } else if (!sourcesAgree) {
     danger.score += 25;
     danger.reasons.push(
-      `Sources disagree: spread is ${(spread * 100).toFixed(2)}% (limit is ${(SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)}%)`
+      `Sources disagree: spread is ${(spread * 100).toFixed(2)}% (limit is ${(_SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)}%)`
     );
   }
 
@@ -134,7 +164,7 @@ export function decide(evidence: Evidence): DecideResult {
   if (atMaxPositions) {
     danger.score += 10;
     danger.reasons.push(
-      `Already at ${openPositionsCount}/${MAX_OPEN_POSITIONS} open positions`
+      `Already at ${openPositionsCount}/${_MAX_OPEN_POSITIONS} open positions`
     );
   }
 
@@ -148,8 +178,8 @@ export function decide(evidence: Evidence): DecideResult {
     danger.score += 10;
     danger.reasons.push("No price history to check");
   } else {
-    isChronic = history.hoursOffPeg !== null && history.hoursOffPeg > CHRONIC_HOURS && depegPct >= DIP_ZONE_START_PCT;
-    isFallingFast = history.change1hPct !== null && history.change1hPct <= -FALLING_FAST_PCT;
+    isChronic = history.hoursOffPeg !== null && history.hoursOffPeg > _CHRONIC_HOURS && depegPct >= _DIP_ZONE_START_PCT;
+    isFallingFast = history.change1hPct !== null && history.change1hPct <= -_FALLING_FAST_PCT;
     isRepeatDip = history.hadPriorDipCycle === true;
 
     if (isChronic) {
@@ -164,7 +194,7 @@ export function decide(evidence: Evidence): DecideResult {
       danger.reasons.push(
         `Still falling fast: down ${(Math.abs(history.change1hPct!) * 100).toFixed(1)}% in the last hour`
       );
-    } else if (history.change1hPct !== null && history.change1hPct <= -FALLING_PCT) {
+    } else if (history.change1hPct !== null && history.change1hPct <= -_FALLING_PCT) {
       danger.score += 10;
       danger.reasons.push(
         `Still slipping: down ${(Math.abs(history.change1hPct) * 100).toFixed(1)}% in the last hour`
@@ -178,7 +208,7 @@ export function decide(evidence: Evidence): DecideResult {
       );
     }
 
-    if (history.daysOfData !== null && history.daysOfData < MIN_HISTORY_DAYS) {
+    if (history.daysOfData !== null && history.daysOfData < _MIN_HISTORY_DAYS) {
       danger.score += 10;
       danger.reasons.push(`Only ${history.daysOfData.toFixed(1)} days of price history`);
     }
@@ -188,17 +218,17 @@ export function decide(evidence: Evidence): DecideResult {
 
   if (isInDipZone) {
     const zoneDepth =
-      (depegPct - DIP_ZONE_START_PCT) / (DEEP_DEPEG_PCT - DIP_ZONE_START_PCT);
+      (depegPct - _DIP_ZONE_START_PCT) / (_DEEP_DEPEG_PCT - _DIP_ZONE_START_PCT);
     const dipPts = Math.round(20 + zoneDepth * 30); // 20–50 pts
     opportunity.score += dipPts;
     opportunity.reasons.push(
-      `Price is ${(depegPct * 100).toFixed(2)}% below peg — in the dip zone ${(DIP_ZONE_START_PCT * 100).toFixed(1)}%–${(DEEP_DEPEG_PCT * 100).toFixed(0)}% (+${dipPts} pts)`
+      `Price is ${(depegPct * 100).toFixed(2)}% below peg — in the dip zone ${(_DIP_ZONE_START_PCT * 100).toFixed(1)}%–${(_DEEP_DEPEG_PCT * 100).toFixed(0)}% (+${dipPts} pts)`
     );
 
     if (sourcesAgree) {
       opportunity.score += 25;
       opportunity.reasons.push(
-        `Sources agree: spread is ${(spread * 100).toFixed(2)}% (under ${(SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)}%)`
+        `Sources agree: spread is ${(spread * 100).toFixed(2)}% (under ${(_SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)}%)`
       );
     }
 
@@ -215,7 +245,7 @@ export function decide(evidence: Evidence): DecideResult {
 
     // History-based opportunity
     if (history !== undefined) {
-      if (history.hoursOffPeg !== null && history.hoursOffPeg <= FRESH_DIP_HOURS) {
+      if (history.hoursOffPeg !== null && history.hoursOffPeg <= _FRESH_DIP_HOURS) {
         opportunity.score += 10;
         opportunity.reasons.push(
           `Fresh dip: was at peg ${history.hoursOffPeg.toFixed(1)} hours ago`
@@ -223,7 +253,7 @@ export function decide(evidence: Evidence): DecideResult {
       }
       if (
         history.bounceFromLowPct !== null &&
-        history.bounceFromLowPct >= BOUNCE_PCT &&
+        history.bounceFromLowPct >= _BOUNCE_PCT &&
         history.change1hPct !== null &&
         history.change1hPct >= 0
       ) {
@@ -277,10 +307,10 @@ export function decide(evidence: Evidence): DecideResult {
   if (decision === "buy") {
     const entry = medianPrice;
     result.buy = {
-      sizeUsd: MAX_POSITION_USD,
+      sizeUsd: _MAX_POSITION_USD,
       entry,
-      takeProfit: peg * (1 - TAKE_PROFIT_DISTANCE_PCT),
-      stopLoss: entry * (1 - STOP_LOSS_PCT),
+      takeProfit: peg * (1 - _TAKE_PROFIT_DISTANCE_PCT),
+      stopLoss: entry * (1 - _STOP_LOSS_PCT),
     };
   }
 
