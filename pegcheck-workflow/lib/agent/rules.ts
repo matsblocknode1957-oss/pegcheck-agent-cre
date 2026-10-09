@@ -22,6 +22,7 @@ export interface HistoryStats {
   bounceFromLowPct: number | null;
   pctBelow7d: number | null;
   daysOfData: number | null;
+  hadPriorDipCycle: boolean | null;
 }
 
 export interface Evidence {
@@ -141,6 +142,7 @@ export function decide(evidence: Evidence): DecideResult {
 
   let isChronic = false;
   let isFallingFast = false;
+  let isRepeatDip = false;
 
   if (history === undefined) {
     danger.score += 10;
@@ -148,6 +150,7 @@ export function decide(evidence: Evidence): DecideResult {
   } else {
     isChronic = history.hoursOffPeg !== null && history.hoursOffPeg > CHRONIC_HOURS && depegPct >= DIP_ZONE_START_PCT;
     isFallingFast = history.change1hPct !== null && history.change1hPct <= -FALLING_FAST_PCT;
+    isRepeatDip = history.hadPriorDipCycle === true;
 
     if (isChronic) {
       danger.score += 35;
@@ -165,6 +168,13 @@ export function decide(evidence: Evidence): DecideResult {
       danger.score += 10;
       danger.reasons.push(
         `Still slipping: down ${(Math.abs(history.change1hPct) * 100).toFixed(1)}% in the last hour`
+      );
+    }
+
+    if (isRepeatDip) {
+      danger.score += 50;
+      danger.reasons.push(
+        "Repeat-dip pattern: coin dipped, recovered to peg, dipping again within 72 h"
       );
     }
 
@@ -243,12 +253,14 @@ export function decide(evidence: Evidence): DecideResult {
     !atMaxPositions &&
     history !== undefined &&
     !isChronic &&
-    !isFallingFast;
+    !isFallingFast &&
+    !isRepeatDip;
 
   const mustAvoid =
     isDeepDepeg ||
     !sourcesAgree ||
     isChronic ||
+    isRepeatDip ||
     (isInDipZone && danger.score > opportunity.score);
 
   let decision: Decision;

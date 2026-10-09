@@ -17,9 +17,13 @@ export type ApiSummary = {
   low24h: number | null
   lastAtPegTs: number | null
   historyCount: number
+  // true when a dip-zone entry exists in the history window that predates lastAtPegTs;
+  // combined with a recent lastAtPegTs this flags the "dipped → recovered → dipping again" pattern
+  hadDipBeforePeg: boolean
 }
 
 const USDC_PEG = 1.0
+const REPEAT_DIP_WINDOW_MS = 72 * 60 * 60 * 1000
 
 export function summariseHistory(
   history: HistoryEntry[],
@@ -29,7 +33,7 @@ export function summariseHistory(
     return {
       latestPrice: 0, latestTs: nowMs, oldestTs: nowMs,
       price1hAgo: null, price24hAgo: null, low24h: null,
-      lastAtPegTs: null, historyCount: 0,
+      lastAtPegTs: null, historyCount: 0, hadDipBeforePeg: false,
     }
   }
 
@@ -56,6 +60,19 @@ export function summariseHistory(
     }
   }
 
+  // Was any history entry in the dip zone BEFORE the last at-peg timestamp,
+  // and within the 72 h repeat-dip window? Old wobbles outside that window are ignored.
+  let hadDipBeforePeg = false
+  if (lastAtPegTs !== null) {
+    const dipWindowStart = nowMs - REPEAT_DIP_WINDOW_MS
+    for (const e of sorted) {
+      if (e.ts >= lastAtPegTs) break   // sorted ascending; nothing earlier follows
+      if (e.ts < dipWindowStart) continue  // too old — ignore wobbles outside the 72 h window
+      const depeg = (USDC_PEG - e.price) / USDC_PEG
+      if (depeg >= DIP_ZONE_START_PCT) { hadDipBeforePeg = true; break }
+    }
+  }
+
   return {
     latestPrice:  sorted[sorted.length - 1]!.price,
     latestTs:     sorted[sorted.length - 1]!.ts,
@@ -65,6 +82,7 @@ export function summariseHistory(
     low24h:       low24h < Infinity ? low24h : null,
     lastAtPegTs,
     historyCount: sorted.length,
+    hadDipBeforePeg,
   }
 }
 
@@ -73,6 +91,7 @@ export function buildHistoryStats(s: ApiSummary, nowMs: number): HistoryStats {
     return {
       hoursOffPeg: null, change1hPct: null, change24hPct: null,
       bounceFromLowPct: null, pctBelow7d: null, daysOfData: null,
+      hadPriorDipCycle: null,
     }
   }
   return {
@@ -90,5 +109,9 @@ export function buildHistoryStats(s: ApiSummary, nowMs: number): HistoryStats {
                         : null,
     pctBelow7d:       null,
     daysOfData:       null,
+    // true when the coin has shown a dip-recovery-dip cycle within the guard window
+    hadPriorDipCycle: s.hadDipBeforePeg && s.lastAtPegTs !== null
+                        ? (nowMs - s.lastAtPegTs) < REPEAT_DIP_WINDOW_MS
+                        : null,
   }
 }

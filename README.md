@@ -126,21 +126,52 @@ Full results: [`pegcheck-workflow/replay/stop-comparison.md`](pegcheck-workflow/
   - `tUST:USD` on Bitfinex is Tether, not TerraUSD — the script tests both and reports which responded
   - Binance delisted USTUSDT around 13 May 2022; the window runs 5–13 May (193 candles)
 
-**Headline results on a $1,000 position:**
+**Headline results on a $1,000 position (with Rule B active):**
 
 | Event | Stop setting | Total P&L |
 |-------|-------------|-----------|
 | USDC SVB Mar 2023 | any (3 %, 5 %, 10 %, none, hold) | **+$50** |
-| UST Terra May 2022 | 3 % stop | **−$56** |
-| UST Terra May 2022 | 5 % stop | **−$96** |
-| UST Terra May 2022 | 10 % stop | **−$96** |
-| UST Terra May 2022 | no stop | **−$713** |
+| UST Terra May 2022 | any (3 %, 5 %, 10 %, none, hold) | **+$4** |
 
-**What the replay revealed — and what needs fixing:**
+**What the replay revealed — and what was fixed:**
 
-The bot got lucky on UST: it caught the Luna Foundation Guard's brief peg-defence bounce on 8 May (+$3.52), exited cleanly, then re-bought twice on 9 May as UST briefly flickered back into the dip zone during its final collapse. Each re-buy was stopped out quickly, so the stop-loss capped the damage — **the stop-loss is essential**; without it the loss on the second trade alone was −$717.
+Before the repeat-dip guard, the bot re-bought UST twice on 9 May as UST flickered back into the dip zone during its final collapse. Each re-buy was stopped out quickly under 3 %–10 % stops (total −$56 to −$96); without a stop the second trade rode UST to $0.28 (−$713). The Luna Foundation Guard's brief peg-defence bounce on 8 May (+$3.52) was the only trade worth keeping.
 
-The deeper problem: after a stop-loss the bot immediately re-buys the moment price re-enters the dip zone, even during a collapse. A **cooldown after a stop-loss exit** (e.g. do not re-enter for N hours on the same coin) is the planned fix to prevent this pattern.
+Rule B — "coin dipped, recovered to peg, dipping again within 72 h → AVOID" — blocks both re-buys by detecting the unstable dip-recovery-dip cycle. After Rule B, all stop settings yield the same result: +$3.52 from the May 7–8 trade only. See the **[Repeat-dip rule](#repeat-dip-rule-rule-b)** section below for the full comparison.
+
+---
+
+## Repeat-dip rule (Rule B)
+
+To fix the UST re-buy problem revealed by the stop-loss comparison, three guard rules were tested against both events at the 3 % stop and at no stop:
+
+- **Rule A** — 48 h cooldown after a stop-loss exit
+- **Rule B** — if the coin dipped below peg, recovered to within 0.5 % of peg, then dips again within 72 h → AVOID (+50 danger)
+- **Rule C** — Rule A + Rule B combined
+
+| Rule | Stop | USDC 2023 | UST 2022 total |
+|------|------|-----------|----------------|
+| Baseline | 3 % | +$50.05 (won) | −$56.48 (3 trades) |
+| Baseline | none | +$50.05 (won) | −$713.44 (2 trades) |
+| Rule A | 3 % | +$50.05 (won) | −$26.48 (2 trades — trade 3 blocked by cooldown) |
+| Rule A | none | +$50.05 (won) | −$713.44 (trade 2 not blocked — came after a **win**, not a stop-loss) |
+| **Rule B** | **3 %** | **+$50.05 (won)** | **+$3.52 (1 trade only)** |
+| **Rule B** | **none** | **+$50.05 (won)** | **+$3.52 (1 trade only)** |
+| Rule C | 3 % | +$50.05 (won) | +$3.52 (same as B) |
+| Rule C | none | +$50.05 (won) | +$3.52 (same as B) |
+
+**Why Rule B, not Rule A:** UST trade 2 came after a **win** (the May 7–8 take-profit), not a stop-loss. Rule A's cooldown only activates after a stop-loss exit and cannot block it. Rule B detects the unstable pattern directly: `hadDipBeforePeg` in `history.ts` finds any prior dip-zone entry before the last at-peg timestamp; if that recovery was within 72 h, `hadPriorDipCycle` is set and `isRepeatDip` fires. Rule C adds no benefit over Rule B for these events.
+
+**Why USDC 2023 is unaffected:** The SVB crash started from peg — there was no prior dip before the crash, so `hadPriorDipCycle` is never `true` during the recovery window. The single +$50 win is preserved exactly.
+
+**Implemented:** Rule B only. No config changes. Files: `lib/agent/history.ts` (`hadDipBeforePeg`, `hadPriorDipCycle`), `lib/agent/rules.ts` (`isRepeatDip` — +50 danger, blocked from `canBuy`, forced into `mustAvoid`).
+
+**How to reproduce:**
+
+```bash
+cd pegcheck-workflow
+bun run replay/rule-comparison.ts
+```
 
 ---
 

@@ -48,12 +48,14 @@ export type ReplayResult = {
 }
 
 export type ReplayConfig = {
-  candles:           Candle[]
-  stopPct:           number | null  // null = no stop-loss
-  maxDays:           number | null  // null = no timeout
-  peg?:              number
-  coin?:             string
-  relaxSourceCheck?: boolean        // single-source what-if: echo lone source so sourcesAgree fires
+  candles:             Candle[]
+  stopPct:             number | null  // null = no stop-loss
+  maxDays:             number | null  // null = no timeout
+  peg?:                number
+  coin?:               string
+  relaxSourceCheck?:   boolean        // single-source what-if: echo lone source so sourcesAgree fires
+  stopLossCooldown?:   boolean        // Rule A: block buy for 48 h after a stop-loss exit
+  suppressRepeatDip?:  boolean        // baseline testing: override hadPriorDipCycle to null
 }
 
 function conservativeExit(
@@ -81,17 +83,22 @@ function conservativeExit(
   return         { status: "open",      exitPrice: closeMedian, profitUsd: pnl(closeMedian) }
 }
 
+const COOLDOWN_48H_MS = 48 * 60 * 60 * 1000
+
 export function runReplay({
   candles,
   stopPct,
   maxDays,
   peg  = 1.0,
   coin = "STABLE",
-  relaxSourceCheck = false,
+  relaxSourceCheck  = false,
+  stopLossCooldown  = false,
+  suppressRepeatDip = false,
 }: ReplayConfig): ReplayResult {
   const trades:       TradeRecord[] = []
   const candleStates: CandleState[] = []
   let openTrade: OpenTrade | null = null
+  let lastStopLossExitMs: number | null = null
 
   for (let i = 0; i < candles.length; i++) {
     const c     = candles[i]!
@@ -112,7 +119,10 @@ export function runReplay({
     }
 
     const summary: ApiSummary = { medianPrice: c.median, sources: srcPrices, ...summarised }
-    const histStats = buildHistoryStats(summary, nowMs)
+    const rawHistStats = buildHistoryStats(summary, nowMs)
+    const histStats = suppressRepeatDip
+      ? { ...rawHistStats, hadPriorDipCycle: null }
+      : rawHistStats
 
     const srcVals      = Object.values(srcPrices)
     const spread       = srcVals.length >= 2
@@ -133,6 +143,7 @@ export function runReplay({
       exitPrice = exit.exitPrice
       if (exit.status !== "open") {
         exitStatus = exit.status
+        if (exit.status === "lost") lastStopLossExitMs = nowMs
         trades.push({
           entryTime:  openTrade.openedAt.toISOString(),
           entryPrice: openTrade.entry,
@@ -158,7 +169,10 @@ export function runReplay({
     }
     const result = decide(evidence)
 
-    if (result.decision === "buy" && openTrade === null && result.buy !== undefined) {
+    const inCooldown = stopLossCooldown && lastStopLossExitMs !== null
+      && (nowMs - lastStopLossExitMs) < COOLDOWN_48H_MS
+
+    if (result.decision === "buy" && openTrade === null && result.buy !== undefined && !inCooldown) {
       openTrade = {
         coin,
         peg,
