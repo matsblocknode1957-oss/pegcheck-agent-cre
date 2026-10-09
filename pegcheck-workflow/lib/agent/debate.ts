@@ -1,4 +1,13 @@
 import type { Decision, DecideResult, Evidence } from "./rules.js"
+import {
+  DIP_ZONE_START_PCT,
+  DEEP_DEPEG_PCT,
+  TAKE_PROFIT_DISTANCE_PCT,
+  STOP_LOSS_PCT,
+  MAX_TRADE_DAYS,
+  SOURCE_DISAGREE_SPREAD_PCT,
+  CHRONIC_HOURS,
+} from "./config.js"
 
 export type DebateResult = {
   bull:        string    // logged only — argument for entering the trade
@@ -29,19 +38,34 @@ export function buildDebateRequest(
   evidence: Evidence,
   result:   DecideResult,
 ): AnthropicRequestBody {
-  const depegPct  = ((evidence.peg - evidence.medianPrice) / evidence.peg * 100).toFixed(2)
-  const dangerStr = result.danger.reasons.length      ? result.danger.reasons.join("; ")      : "none"
-  const oppStr    = result.opportunity.reasons.length  ? result.opportunity.reasons.join("; ") : "none"
+  const depegPct       = ((evidence.peg - evidence.medianPrice) / evidence.peg * 100).toFixed(2)
+  const dangerStr      = result.danger.reasons.length     ? result.danger.reasons.join("; ")      : "none"
+  const oppStr         = result.opportunity.reasons.length ? result.opportunity.reasons.join("; ") : "none"
+  const dipStartPct    = (DIP_ZONE_START_PCT * 100).toFixed(1)
+  const deepPct        = (DEEP_DEPEG_PCT * 100).toFixed(0)
+  const tpPct          = (TAKE_PROFIT_DISTANCE_PCT * 100).toFixed(1)
+  const slPct          = (STOP_LOSS_PCT * 100).toFixed(0)
+  const spreadPct      = (SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)
 
   const prompt =
-    `You are a stablecoin dip-trading debate panel. Analyse this opportunity and reply ONLY with valid JSON — no markdown, no prose outside the JSON object.\n\n` +
+    `You are a stablecoin dip-trading debate panel. Reply ONLY with valid JSON — no markdown, no code fences, no prose outside the JSON.\n\n` +
+    `Rules that govern this system (the Judge must cite these thresholds; do not invent different numbers):\n` +
+    `- Dip zone: ${dipStartPct}%–${deepPct}% below peg (outside this range → no trade)\n` +
+    `- Take-profit: when price returns to within ${tpPct}% of peg\n` +
+    `- Stop-loss: ${slPct}% below entry price\n` +
+    `- Max hold: ${MAX_TRADE_DAYS} days\n` +
+    `- Chronic depeg guard: price off peg for more than ${CHRONIC_HOURS} h → AVOID\n` +
+    `- Source-agreement guard: requires 2+ price sources within ${spreadPct}% spread of each other\n` +
+    `- Repeat-dip guard: coin dipped, recovered to peg, then dips again within ${CHRONIC_HOURS} h → AVOID\n\n` +
+    `Important for all three voices: never call any trade "risk-free" or claim "zero risk" — stablecoin trades always carry depeg risk.\n\n` +
+    `Current situation:\n` +
     `Coin: ${evidence.coin}\n` +
     `Price: $${evidence.medianPrice.toFixed(4)} (${depegPct}% from $${evidence.peg.toFixed(2)} peg)\n` +
     `Rules-engine verdict: ${result.decision.toUpperCase()} — danger ${result.danger.score}/100, opportunity ${result.opportunity.score}/100\n` +
     `Danger reasons:      ${dangerStr}\n` +
     `Opportunity reasons: ${oppStr}\n\n` +
     `Reply with exactly this structure:\n` +
-    `{"bull":"<≤40 words arguing to buy the dip>","bear":"<≤40 words arguing against>","verdict":"<BUY|WATCH|AVOID>","explanation":"<≤80 words from the judge>"}\n\n` +
+    `{"bull":"<≤40 words arguing to buy the dip>","bear":"<≤40 words arguing against>","verdict":"<BUY|WATCH|AVOID>","explanation":"<≤80 words — Judge must reference the thresholds above>"}\n\n` +
     `Constraints on verdict:\n` +
     `- if rules-engine said AVOID → verdict must be AVOID\n` +
     `- if rules-engine said WATCH → verdict may be WATCH or AVOID only\n` +
