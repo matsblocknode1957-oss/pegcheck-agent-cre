@@ -20,6 +20,7 @@ import { decide } from "./lib/agent/rules.js"
 import type { Evidence } from "./lib/agent/rules.js"
 import { summariseHistory, buildHistoryStats } from "./lib/agent/history.js"
 import type { HistoryEntry, ApiSummary } from "./lib/agent/history.js"
+import { buildDebateRequest, parseDebateResponse } from "./lib/agent/debate.js"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,60 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
   }
   runtime.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+  // ── Step 5: AI Debate ────────────────────────────────────────────────────────
+  // Bull and Bear agents argue; Judge gives final call.
+  // Only the clamped verdict enters consensus — bull/bear/explanation are logged only.
+  // If the rules engine already said AVOID, or no API key is configured, we skip.
+  let debateVerdict: string | null = null
+
+  if (result.decision !== "avoid") {
+    let apiKey = ""
+    try {
+      apiKey = runtime.getSecret({ id: "ANTHROPIC_API_KEY" }).result().value ?? ""
+    } catch {
+      // secret not declared or env var not set
+    }
+
+    if (!apiKey) {
+      runtime.log("[DEBATE] debate skipped: no key")
+    } else {
+      const reqBody = buildDebateRequest(evidence, result)
+      const bodyB64 = Buffer.from(JSON.stringify(reqBody), "utf8").toString("base64")
+
+      const { dv } = runtime.runInNodeMode(
+        (nodeRuntime: NodeRuntime<Config>): { dv: string } => {
+          const debateResp = httpClient.sendRequest(nodeRuntime, {
+            url:    "https://api.anthropic.com/v1/messages",
+            method: "POST",
+            multiHeaders: {
+              "x-api-key":         { values: [apiKey] },
+              "anthropic-version": { values: ["2023-06-01"] },
+              "content-type":      { values: ["application/json"] },
+            },
+            body: bodyB64,
+          }).result()
+
+          if (!ok(debateResp)) {
+            nodeRuntime.log(`[DEBATE] API error ${debateResp.statusCode} — skipping`)
+            return { dv: result.decision }
+          }
+
+          const debateResult = parseDebateResponse(json(debateResp), result.decision)
+          nodeRuntime.log(`[DEBATE] ──────────────────────────────────────────────`)
+          nodeRuntime.log(`[DEBATE] Bull:    ${debateResult.bull}`)
+          nodeRuntime.log(`[DEBATE] Bear:    ${debateResult.bear}`)
+          nodeRuntime.log(`[DEBATE] Verdict: ${debateResult.verdict.toUpperCase()}`)
+          nodeRuntime.log(`[DEBATE] Judge:   ${debateResult.explanation}`)
+          nodeRuntime.log(`[DEBATE] ──────────────────────────────────────────────`)
+          return { dv: debateResult.verdict }
+        },
+        ConsensusAggregationByFields<{ dv: string }>({ dv: identical }),
+      )().result()
+
+      debateVerdict = dv
+    }
+  }
+
   return JSON.stringify({
     decision:                result.decision,
     dangerScore:             result.danger.score,
@@ -203,6 +258,7 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
       bounceFromLowPct: historyStats.bounceFromLowPct,
       daysOfData:      historyStats.daysOfData,
     },
+    debateVerdict,
   })
 }
 
