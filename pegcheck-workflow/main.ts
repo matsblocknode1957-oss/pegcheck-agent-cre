@@ -225,7 +225,7 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
             return { dv: result.decision }
           }
 
-          const debateResult = parseDebateResponse(json(debateResp), result.decision)
+          const debateResult = parseDebateResponse(json(debateResp), result.decision, (msg) => nodeRuntime.log(msg))
           nodeRuntime.log(`[DEBATE] ──────────────────────────────────────────────`)
           nodeRuntime.log(`[DEBATE] Bull:    ${debateResult.bull}`)
           nodeRuntime.log(`[DEBATE] Bear:    ${debateResult.bear}`)

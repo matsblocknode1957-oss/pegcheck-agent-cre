@@ -49,7 +49,7 @@ export function buildDebateRequest(
 
   return {
     model:       "claude-haiku-4-5-20251001",
-    max_tokens:  300,
+    max_tokens:  600,
     temperature: 0,
     messages:    [{ role: "user", content: prompt }],
   }
@@ -58,6 +58,7 @@ export function buildDebateRequest(
 export function parseDebateResponse(
   rawApiResponse: unknown,
   rulesDecision:  Decision,
+  log?: (msg: string) => void,
 ): DebateResult {
   const fallback: DebateResult = {
     bull: "(unavailable)", bear: "(unavailable)",
@@ -66,14 +67,25 @@ export function parseDebateResponse(
 
   try {
     const resp = rawApiResponse as {
-      content?: Array<{ type: string; text: string }>
-      error?:   { type: string; message: string }
+      content?:    Array<{ type: string; text: string }>
+      error?:      { type: string; message: string }
+      stop_reason?: string
     }
     if (resp.error) return fallback
 
-    const text   = resp.content?.[0]?.text ?? ""
-    const parsed = JSON.parse(text) as {
-      bull?: string; bear?: string; verdict?: string; explanation?: string
+    const raw      = resp.content?.[0]?.text ?? ""
+    // Strip ```json fences, then extract the outermost { … }
+    const stripped = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()
+    const start    = stripped.indexOf("{")
+    const end      = stripped.lastIndexOf("}")
+    const jsonStr  = start >= 0 && end > start ? stripped.slice(start, end + 1) : stripped
+
+    let parsed: { bull?: string; bear?: string; verdict?: string; explanation?: string }
+    try {
+      parsed = JSON.parse(jsonStr) as typeof parsed
+    } catch {
+      log?.(`[DEBATE] parse failed — stop_reason=${resp.stop_reason ?? "unknown"} text=${raw.slice(0, 200)}`)
+      return fallback
     }
 
     return {
