@@ -107,6 +107,43 @@ One historical event, not proof of future results. The agent could easily have b
 
 ---
 
+## Stop-loss comparison (USDC 2023 + UST 2022)
+
+A second replay script runs both the SVB crash and the TerraUSD collapse across five stop-loss settings and shows every trade, not just the first.
+
+**How to run:**
+
+```bash
+cd pegcheck-workflow
+bun run replay/stop-comparison.ts   # fetches live historical data, prints table, writes replay/stop-comparison.md
+```
+
+Full results: [`pegcheck-workflow/replay/stop-comparison.md`](pegcheck-workflow/replay/stop-comparison.md)
+
+**Data sources:**
+- USDC — Bitstamp USDCUSD + Bitfinex USDCUSD (same as the SVB replay above)
+- UST — Binance USTUSDT (note: USDT-quoted, not USD) + Bitfinex `tTERRAUST:USD`
+  - `tUST:USD` on Bitfinex is Tether, not TerraUSD — the script tests both and reports which responded
+  - Binance delisted USTUSDT around 13 May 2022; the window runs 5–13 May (193 candles)
+
+**Headline results on a $1,000 position:**
+
+| Event | Stop setting | Total P&L |
+|-------|-------------|-----------|
+| USDC SVB Mar 2023 | any (3 %, 5 %, 10 %, none, hold) | **+$50** |
+| UST Terra May 2022 | 3 % stop | **−$56** |
+| UST Terra May 2022 | 5 % stop | **−$96** |
+| UST Terra May 2022 | 10 % stop | **−$96** |
+| UST Terra May 2022 | no stop | **−$713** |
+
+**What the replay revealed — and what needs fixing:**
+
+The bot got lucky on UST: it caught the Luna Foundation Guard's brief peg-defence bounce on 8 May (+$3.52), exited cleanly, then re-bought twice on 9 May as UST briefly flickered back into the dip zone during its final collapse. Each re-buy was stopped out quickly, so the stop-loss capped the damage — **the stop-loss is essential**; without it the loss on the second trade alone was −$717.
+
+The deeper problem: after a stop-loss the bot immediately re-buys the moment price re-enters the dip zone, even during a collapse. A **cooldown after a stop-loss exit** (e.g. do not re-enter for N hours on the same coin) is the planned fix to prevent this pattern.
+
+---
+
 ## Live version
 
 The CRE workflow here is a simulation for the hackathon and does not record trades. The same rules run live inside PegCheck (pegcheck.uk) on its own scheduled job every few minutes, recording practice trades with pretend money to a database, so the agent builds a real track record.
