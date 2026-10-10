@@ -178,3 +178,71 @@ Portfolio: 18 coins, max 3 open, hour by hour, exits before buys. All candles in
 | fdusd | — | — | — | — | — | — | — | — | — |
 | tusd | 1 | 0W/0L/1TO | **-$0.46** | 1 | 0W/0L/1TO | **-$0.46** | 1 | 0W/0L/1TO | **-$0.46** |
 | **TOTAL** | **98** | **56W/1L/39TO** | **+$147.94** | **98** | **56W/1L/39TO** | **+$137.41** | **76** | **69W/0L/6TO** | **+$245.18** |
+
+
+---
+
+## F+C on historical crash datasets
+
+Same settings as prior cross-dataset tests: 0.05%/side fee, 3% stop, 7-day max hold, source check relaxed.
+Datasets: UST May 2022 (Binance + Bitfinex), USDC Mar 2023 (Bitstamp + Bitfinex), own data (4 coins, summed).
+
+### UST May 2022
+
+| Variant | Trades | W/L/TO/O | Net P&L | Max Drawdown |
+| ------- | ------ | -------- | ------- | ------------ |
+| **A0** | 3 | 1W/2L/0TO/0O | **-$59.45** | $61.97 |
+| **A** | 1 | 1W/0L/0TO/0O | **+$2.52** | $0.00 |
+| **F** | 2 | 1W/1L/0TO/0O | **-$28.47** | $30.99 |
+| **F+C** | 2 | 1W/1L/0TO/0O | **-$28.47** | $30.99 |
+
+### USDC Mar 2023
+
+| Variant | Trades | W/L/TO/O | Net P&L | Max Drawdown |
+| ------- | ------ | -------- | ------- | ------------ |
+| **A0** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+| **A** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+| **F** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+| **F+C** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+
+### Own data (4 coins, summed)
+
+| Variant | Trades | W/L/TO/O | Net P&L | Max Drawdown |
+| ------- | ------ | -------- | ------- | ------------ |
+| **A0** | 30 | 27W/0L/1TO/2O | **+$92.40** | $2.70 |
+| **A** | 10 | 8W/0L/1TO/1O | **+$18.99** | $1.45 |
+| **F** | 30 | 27W/0L/1TO/2O | **+$92.40** | $2.70 |
+| **F+C** | 30 | 27W/0L/1TO/2O | **+$92.40** | $2.70 |
+
+### Q1: Does F+C avoid the UST collapse?
+
+A0 takes 3 trades and nets **-$59.45** (1W/2L).
+F+C takes 2 trades and nets **-$28.47** (1W/1L).
+
+**Entry attempts under F+C:**
+
+| Date (UTC) | Price | Depeg | 72h chronic fraction | Action |
+| ---------- | ----- | ----- | -------------------- | ------ |
+| 2022-05-07 21:00 UTC | 0.99450 | 0.6% | 0.0% | ✓ bought |
+| 2022-05-09 05:00 UTC | 0.99485 | 0.5% | 13.7% | ✓ bought |
+
+F+C **does** enter UST at least once. The bought trade(s):
+
+| Entry date | Entry price | Exit | Net P&L |
+| ---------- | ----------- | ---- | ------- |
+| 2022-05-07 21:00 UTC | 0.99450 | won | **+$2.52** |
+| 2022-05-09 05:00 UTC | 0.99485 | lost | **-$30.99** |
+
+
+### Q2: Does F+C still buy the USDC March 2023 dip?
+
+**Yes.** F+C opens 1 trade(s) and nets **+$49.03** — identical to A0 (+$49.03).
+
+The USDC SVB crash started on 2023-03-10 after Circle announced $3.3B exposure to SVB.
+At the point of the first buy signal, USDC had spent very few hours below 0.995
+(the crash was sudden, not chronic), so the 72h chronic fraction was well below 50%.
+The trade opens, USDC recovers over the following days, take-profit fires.
+
+| Entry date | Entry price | Exit | Net P&L | Chronic fraction at entry |
+| ---------- | ----------- | ---- | ------- | ------------------------- |
+| 2023-03-11 19:00 UTC | 0.95043 | won | **+$49.03** | 21.9% |
