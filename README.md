@@ -175,6 +175,60 @@ bun run replay/rule-comparison.ts
 
 ---
 
+## AI debate
+
+On every check (BUY, WATCH, or AVOID), a three-voice LLM panel (Claude Haiku) runs as a sanity check before the result is logged:
+
+- **Bull** — argues for entering the trade (≤ 40 words)
+- **Bear** — argues against (≤ 40 words)
+- **Judge** — weighs both sides and returns a verdict: BUY, WATCH, or AVOID (≤ 80 words)
+
+The debate can only make the verdict *more* cautious — never less. If the rules engine says BUY, the Judge may downgrade to WATCH or AVOID, but it cannot override an engine AVOID to BUY. The rules engine always makes the final call.
+
+The Judge is given ready-made dollar thresholds computed directly from the config constants (e.g. for a $1.00 peg: dip zone $0.9950–$0.9500, take-profit $0.9980, stop-loss 3% below entry). It is instructed to use only those figures and never calculate its own.
+
+**Setup:** add your Anthropic API key to `.env` in the repo root as `PEGCHECK_DEBATE_KEY=sk-ant-...`. The `.env` file is git-ignored and never committed. `secrets.yaml` only maps the secret name `ANTHROPIC_API_KEY` to the environment variable `PEGCHECK_DEBATE_KEY` — no key value goes in `secrets.yaml`. Without a key the debate step is skipped and the rules-engine verdict stands unchanged.
+
+---
+
+## Replay testing
+
+Five buy-rule variants were tested over an 18-coin stablecoin portfolio (max 3 open positions, hourly candles from March–October 2026) and two historical crash events to find a rule that protects against collapse scenarios without sacrificing normal-market performance.
+
+**Portfolio results (18 coins, 3 slots, ~5 months, pretend $1 000/trade, 0.05 %/side fee):**
+
+| Variant | Trades | W/L/TO | Net P&L | Max drawdown | Skipped |
+|---------|--------|--------|---------|-------------|---------|
+| A0 — no Rule B (baseline) | 98 | 56W/1L/39TO | +$147.94 | $31.00 | 222 |
+| F+C — Rule B if ≥1.5% deep + chronic filter | 76 | 69W/0L/6TO | +$245.18 | $1.60 | 0 |
+| **T — tiered (current)** | **76** | **69W/0L/6TO** | **+$245.18** | **$1.60** | **0** |
+
+**Crash-dataset results ($1 000/trade, same settings):**
+
+| Variant | UST May 2022 | USDC SVB Mar 2023 |
+|---------|-------------|-------------------|
+| A0 — baseline | −$59.45 (3t, 1W/2L) | +$49.03 (1W) |
+| A — block all repeat dips | +$2.52 (1t, 1W) | +$49.03 (1W) |
+| F+C | −$28.47 (2t, 1W/1L) | +$49.03 (1W) |
+| **T — tiered** | **+$2.52 (1t, 1W)** | **+$49.03 (1W)** |
+
+**Why variant T was chosen:**
+
+Coins are split into two tiers:
+- **STRICT** (algorithmic / synthetic / partly backed: ust, usdd, frax, dola, alusd, ethena) — full Rule A (block *any* repeat dip within 72 h) plus the chronic filter. These coins carry higher structural risk; the extra caution is worth the occasional missed re-entry.
+- **BACKED** (fiat-backed and over-collateralised: usdc, usdt, pyusd, rlusd, fdusd, usdp, tusd, lusd, bold, mkusd, crvusd, gho, usds) — F+C only (Rule B suppressed for shallow dips ≥ 1.5%, plus chronic filter). Acute flash-crashes like USDC SVB are sudden and non-chronic, so the chronic filter does not block them.
+
+T matches F+C on the normal-market portfolio (+$245.18) and avoids the UST losing re-entry that F+C cannot block — UST's second bad entry was only ~0.5% below peg, below F+C's 1.5% threshold. T closes that gap by not suppressing Rule B for STRICT coins.
+
+**Caveats:**
+- mkusd accounts for +$217 of the +$245 portfolio total. That concentration means the headline number is fragile to a single coin.
+- Replay results use the exact same rules as the live agent but do not model slippage, liquidity depth, API latency, or failed consensus rounds.
+- One good crash outcome (USDC SVB) and one avoided collapse (UST) are not enough data to call the tiering robust — they are the scenarios the rule was designed around.
+
+Full replay scripts and per-coin breakdowns: [`own-data-replay` branch](../../tree/own-data-replay/pegcheck-workflow/replay/).
+
+---
+
 ## Live version
 
 The CRE workflow here is a simulation for the hackathon and does not record trades. The same rules run live inside PegCheck (pegcheck.uk) on its own scheduled job every few minutes, recording practice trades with pretend money to a database, so the agent builds a real track record.
