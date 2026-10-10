@@ -177,7 +177,7 @@ bun run replay/rule-comparison.ts
 
 ## AI debate
 
-When the rules engine reaches a BUY, a three-voice LLM panel (Claude Haiku) runs as a sanity check before the result is logged:
+On every check (BUY, WATCH, or AVOID), a three-voice LLM panel (Claude Haiku) runs as a sanity check before the result is logged:
 
 - **Bull** — argues for entering the trade (≤ 40 words)
 - **Bear** — argues against (≤ 40 words)
@@ -187,7 +187,7 @@ The debate can only make the verdict *more* cautious — never less. If the rule
 
 The Judge is given ready-made dollar thresholds computed directly from the config constants (e.g. for a $1.00 peg: dip zone $0.9950–$0.9500, take-profit $0.9980, stop-loss 3% below entry). It is instructed to use only those figures and never calculate its own.
 
-**Setup:** add your Anthropic API key to `secrets.yaml` in the repo root under the key `PEGCHECK_DEBATE_KEY`. The `secrets.yaml` file is git-ignored and never committed. Without a key the debate step is skipped and the rules-engine verdict stands unchanged.
+**Setup:** add your Anthropic API key to `.env` in the repo root as `PEGCHECK_DEBATE_KEY=sk-ant-...`. The `.env` file is git-ignored and never committed. `secrets.yaml` only maps the secret name `ANTHROPIC_API_KEY` to the environment variable `PEGCHECK_DEBATE_KEY` — no key value goes in `secrets.yaml`. Without a key the debate step is skipped and the rules-engine verdict stands unchanged.
 
 ---
 
