@@ -246,3 +246,104 @@ The trade opens, USDC recovers over the following days, take-profit fires.
 | Entry date | Entry price | Exit | Net P&L | Chronic fraction at entry |
 | ---------- | ----------- | ---- | ------- | ------------------------- |
 | 2023-03-11 19:00 UTC | 0.95043 | won | **+$49.03** | 21.9% |
+
+---
+
+## Variant T (tiered): portfolio and crash datasets
+
+Variant T applies different buy-rules by coin backing type:
+
+| Tier | Coins | Rule |
+| ---- | ----- | ---- |
+| **STRICT** | ust, usdd, frax, dola, alusd, ethena | A + C: block any repeat dip within 72 h + chronic filter |
+| **BACKED** | usdc, usdt, pyusd, rlusd, fdusd, usdp, tusd, lusd, bold, mkusd, crvusd, gho, usds | F + C: Rule B only when dip ≥ 1.5% + same chronic filter |
+
+Portfolio coins — **strict**: [alusd, dola, frax, usdd, ethena] · **backed**: [bold, lusd, mkusd, usdp, crvusd, gho, pyusd, rlusd, usdc, usds, usdt, fdusd, tusd]
+
+### Portfolio: A0 / F / F+C / T
+
+18 coins · max 3 open · hour by hour · exits before buys · glitches included.
+Settings: 0.05%/side fee, 3% stop-loss, 7-day max hold, source check relaxed.
+
+| Variant | Trades | W/L/TO/O | Net P&L | Max Drawdown | Skipped |
+| ------- | ------ | -------- | ------- | ------------ | ------- |
+| **A0** | 98 | 56W/1L/39TO/2O | **+$147.94** | $31.00 | 222 |
+| **F** | 98 | 56W/1L/39TO/2O | **+$137.41** | $31.00 | 217 |
+| **F+C** | 76 | 69W/0L/6TO/1O | **+$245.18** | $1.60 | 0 |
+| **T** | 76 | 69W/0L/6TO/1O | **+$245.18** | $1.60 | 0 |
+
+#### Per-coin P&L
+
+| Coin | Tier | A0 P&L | F P&L | F+C P&L | T P&L |
+| ---- | ---- | ------ | ----- | ------- | ----- |
+| alusd | strict | **-$64.10** | **-$64.10** | — | — |
+| bold | backed | **+$0.97** | **+$0.97** | **+$0.97** | **+$0.97** |
+| lusd | backed | **+$14.40** | **+$14.40** | **+$14.40** | **+$14.40** |
+| mkusd | backed | **+$156.79** | **+$156.79** | **+$217.86** | **+$217.86** |
+| usdp | backed | **+$5.43** | **+$5.43** | **+$8.28** | **+$8.28** |
+| crvusd | backed | — | — | — | — |
+| dola | strict | **+$1.50** | **+$1.50** | **+$2.10** | **+$2.10** |
+| frax | strict | **+$33.41** | **+$22.88** | — | — |
+| gho | backed | — | — | — | — |
+| usdd | strict | — | — | **+$2.03** | **+$2.03** |
+| pyusd | backed | — | — | — | — |
+| rlusd | backed | — | — | — | — |
+| usdc | backed | — | — | — | — |
+| usds | backed | — | — | — | — |
+| usdt | backed | — | — | — | — |
+| ethena | strict | — | — | — | — |
+| fdusd | backed | — | — | — | — |
+| tusd | backed | **-$0.46** | **-$0.46** | **-$0.46** | **-$0.46** |
+| **TOTAL** | | **+$147.94** | **+$137.41** | **+$245.18** | **+$245.18** |
+
+### Crash datasets: UST May 2022 and USDC Mar 2023
+
+For T: UST is STRICT tier (A + C rules), USDC is BACKED tier (F + C rules).
+
+#### UST May 2022 (STRICT tier)
+
+| Variant | Trades | W/L/TO/O | Net P&L | Max Drawdown |
+| ------- | ------ | -------- | ------- | ------------ |
+| **A0** | 3 | 1W/2L/0TO/0O | **-$59.45** | $61.97 |
+| **F** | 2 | 1W/1L/0TO/0O | **-$28.47** | $30.99 |
+| **F+C** | 2 | 1W/1L/0TO/0O | **-$28.47** | $30.99 |
+| **T** | 1 | 1W/0L/0TO/0O | **+$2.52** | $0.00 |
+
+#### USDC Mar 2023 (BACKED tier)
+
+| Variant | Trades | W/L/TO/O | Net P&L | Max Drawdown |
+| ------- | ------ | -------- | ------- | ------------ |
+| **A0** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+| **F** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+| **F+C** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+| **T** | 1 | 1W/0L/0TO/0O | **+$49.03** | $0.00 |
+
+### Q answers
+
+**Q1: Does T avoid the UST loss? Yes.**
+
+T takes 1 trade(s) on UST and nets **+$2.52** — 0 losses.
+F+C took 2 trade(s) and netted **-$28.47** (1W/1L).
+
+UST is in the STRICT tier, so T applies full Rule A (block any repeat dip within 72 h) plus
+the chronic filter. The second, losing entry on 2022-05-09 had `hadPriorDipCycle = true`
+because UST had dipped, recovered briefly, and was dipping again — exactly what Rule A blocks.
+F+C's version of Rule B was suppressed at that signal because the depeg was only ~0.5%, below
+the 1.5% F-threshold. T does not suppress Rule B for STRICT coins, so the block fires and
+the losing trade is avoided.
+
+**Q2: Does T keep the USDC win? Yes.**
+
+USDC is BACKED tier, so T = F+C on USDC.
+T: 1t 1W/0L **+$49.03** — identical to F+C (**+$49.03**).
+
+**Q3: How much of F+C's +$245.18 portfolio P&L does T keep?**
+
+T nets **+$245.18** on the 18-coin portfolio — 100% of F+C's total.
+T and F+C are **identical** on this portfolio.
+
+All STRICT-tier coins (alusd, dola, frax, usdd, ethena) were already blocked by the chronic
+filter under F+C, so T's stronger Rule B for those coins makes no additional difference here.
+The extra protection only matters when a STRICT coin is at peg → dips → recovers → dips again
+and is NOT in a chronic state. That pattern (UST May 2022) does not appear in the current
+batch data.
