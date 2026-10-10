@@ -41,18 +41,24 @@ export function buildDebateRequest(
   const depegPct       = ((evidence.peg - evidence.medianPrice) / evidence.peg * 100).toFixed(2)
   const dangerStr      = result.danger.reasons.length     ? result.danger.reasons.join("; ")      : "none"
   const oppStr         = result.opportunity.reasons.length ? result.opportunity.reasons.join("; ") : "none"
-  const dipStartPct    = (DIP_ZONE_START_PCT * 100).toFixed(1)
-  const deepPct        = (DEEP_DEPEG_PCT * 100).toFixed(0)
   const tpPct          = (TAKE_PROFIT_DISTANCE_PCT * 100).toFixed(1)
   const slPct          = (STOP_LOSS_PCT * 100).toFixed(0)
   const spreadPct      = (SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)
 
+  // Dollar prices computed from config + peg — injected into the prompt so the Judge
+  // never has to derive its own numbers.
+  const peg      = evidence.peg
+  const dipStart = (peg * (1 - DIP_ZONE_START_PCT)).toFixed(4)           // e.g. $0.9950
+  const dipEnd   = (peg * (1 - DEEP_DEPEG_PCT)).toFixed(4)               // e.g. $0.9500
+  const tpPrice  = (peg * (1 - TAKE_PROFIT_DISTANCE_PCT)).toFixed(4)     // e.g. $0.9980
+  const slPrice  = (evidence.medianPrice * (1 - STOP_LOSS_PCT)).toFixed(4) // e.g. $0.9506
+
   const prompt =
     `You are a stablecoin dip-trading debate panel. Reply ONLY with valid JSON — no markdown, no code fences, no prose outside the JSON.\n\n` +
-    `Rules that govern this system (the Judge must cite these thresholds; do not invent different numbers):\n` +
-    `- Dip zone: ${dipStartPct}%–${deepPct}% below peg (outside this range → no trade)\n` +
-    `- Take-profit: when price returns to within ${tpPct}% of peg\n` +
-    `- Stop-loss: ${slPct}% below entry price\n` +
+    `Rules that govern this system (dollar prices assume a $${peg.toFixed(2)} peg — use these exact figures, never calculate your own):\n` +
+    `- Dip zone: $${dipStart} down to $${dipEnd} (outside this range → no trade)\n` +
+    `- Take-profit: $${tpPrice} (within ${tpPct}% of peg)\n` +
+    `- Stop-loss: approx. $${slPrice} at current price (${slPct}% below entry)\n` +
     `- Max hold: ${MAX_TRADE_DAYS} days\n` +
     `- Chronic depeg guard: price off peg for more than ${CHRONIC_HOURS} h → AVOID\n` +
     `- Source-agreement guard: requires 2+ price sources within ${spreadPct}% spread of each other\n` +
