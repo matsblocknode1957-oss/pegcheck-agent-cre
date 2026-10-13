@@ -7,6 +7,8 @@ import {
   MAX_TRADE_DAYS,
   SOURCE_DISAGREE_SPREAD_PCT,
   CHRONIC_HOURS,
+  getCoinTier,
+  REPEAT_DIP_MIN_DEPTH_BACKED_PCT,
 } from "./config.js"
 
 export type DebateResult = {
@@ -44,6 +46,10 @@ export function buildDebateRequest(
   const tpPct          = (TAKE_PROFIT_DISTANCE_PCT * 100).toFixed(1)
   const slPct          = (STOP_LOSS_PCT * 100).toFixed(0)
   const spreadPct      = (SOURCE_DISAGREE_SPREAD_PCT * 100).toFixed(0)
+  const coinTier       = getCoinTier(evidence.coin)
+  const tierNote       = coinTier === "BACKED"
+    ? `repeat-dip guard is relaxed for dips under ${(REPEAT_DIP_MIN_DEPTH_BACKED_PCT * 100).toFixed(1)}% — this does NOT remove depeg risk`
+    : `repeat-dip guard applies to all dips`
 
   // Dollar prices computed from config + peg — injected into the prompt so the Judge
   // never has to derive its own numbers.
@@ -63,9 +69,10 @@ export function buildDebateRequest(
     `- Chronic depeg guard: more than 50% of 72 h candles >0.5% below peg → AVOID\n` +
     `- Source-agreement guard: requires 2+ price sources within ${spreadPct}% spread of each other\n` +
     `- Repeat-dip guard: coin dipped, recovered to peg, then dips again within ${CHRONIC_HOURS} h → AVOID\n\n` +
-    `Important for all three voices: never call any trade "risk-free" or claim "zero risk" — stablecoin trades always carry depeg risk.\n\n` +
+    `Important for all three voices: never call any trade "risk-free" or claim "zero risk" — stablecoin trades always carry depeg risk. Never say a tier removes or eliminates risk.\n\n` +
     `Current situation:\n` +
     `Coin: ${evidence.coin}\n` +
+    `Coin tier: ${coinTier} — ${tierNote}\n` +
     `Price: $${evidence.medianPrice.toFixed(4)} (${depegPct}% from $${evidence.peg.toFixed(2)} peg)\n` +
     `Rules-engine verdict: ${result.decision.toUpperCase()} — danger ${result.danger.score}/100, opportunity ${result.opportunity.score}/100\n` +
     `Danger reasons:      ${dangerStr}\n` +

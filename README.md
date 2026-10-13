@@ -164,7 +164,7 @@ To fix the UST re-buy problem revealed by the stop-loss comparison, three guard 
 
 **Why USDC 2023 is unaffected:** The SVB crash started from peg — there was no prior dip before the crash, so `hadPriorDipCycle` is never `true` during the recovery window. The single +$50 win is preserved exactly.
 
-**Implemented:** Rule B only. No config changes. Files: `lib/agent/history.ts` (`hadDipBeforePeg`, `hadPriorDipCycle`), `lib/agent/rules.ts` (`isRepeatDip` — +50 danger, blocked from `canBuy`, forced into `mustAvoid`).
+**Implemented:** Rule B with coin tiers. Coins are classified as **STRICT** (algorithmic, synthetic, or partly backed: ust, usdd, frax, dola, alusd, ethena) or **BACKED** (fiat-reserved and over-collateralised: everything else; unknown coins default to STRICT). For STRICT coins, Rule B blocks any repeat dip within 72 h, exactly as before. For BACKED coins, Rule B only fires when the current dip is at least 1.5% below peg — shallow wobbles on well-collateralised coins do not block re-entry. Files: `lib/agent/config.ts` (`getCoinTier`, `REPEAT_DIP_MIN_DEPTH_BACKED_PCT`), `lib/agent/history.ts` (`hadDipBeforePeg`, `hadPriorDipCycle`), `lib/agent/rules.ts` (`isRepeatDip`).
 
 **How to reproduce:**
 
