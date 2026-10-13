@@ -20,6 +20,7 @@ export type ApiSummary = {
   // true when a dip-zone entry exists in the history window that predates lastAtPegTs;
   // combined with a recent lastAtPegTs this flags the "dipped → recovered → dipping again" pattern
   hadDipBeforePeg: boolean
+  chronicCandleFraction: number | null
 }
 
 const USDC_PEG = 1.0
@@ -34,6 +35,7 @@ export function summariseHistory(
       latestPrice: 0, latestTs: nowMs, oldestTs: nowMs,
       price1hAgo: null, price24hAgo: null, low24h: null,
       lastAtPegTs: null, historyCount: 0, hadDipBeforePeg: false,
+      chronicCandleFraction: null,
     }
   }
 
@@ -73,6 +75,16 @@ export function summariseHistory(
     }
   }
 
+  const window72hStart = nowMs - REPEAT_DIP_WINDOW_MS
+  const window72h = sorted.filter(e => e.ts >= window72hStart)
+  let chronicCandleFraction: number | null = null
+  if (window72h.length > 0) {
+    const belowPeg = window72h.filter(
+      e => (USDC_PEG - e.price) / USDC_PEG > DIP_ZONE_START_PCT
+    ).length
+    chronicCandleFraction = belowPeg / window72h.length
+  }
+
   return {
     latestPrice:  sorted[sorted.length - 1]!.price,
     latestTs:     sorted[sorted.length - 1]!.ts,
@@ -83,6 +95,7 @@ export function summariseHistory(
     lastAtPegTs,
     historyCount: sorted.length,
     hadDipBeforePeg,
+    chronicCandleFraction,
   }
 }
 
@@ -91,7 +104,7 @@ export function buildHistoryStats(s: ApiSummary, nowMs: number): HistoryStats {
     return {
       hoursOffPeg: null, change1hPct: null, change24hPct: null,
       bounceFromLowPct: null, pctBelow7d: null, daysOfData: null,
-      hadPriorDipCycle: null,
+      hadPriorDipCycle: null, chronicCandleFraction: null,
     }
   }
   return {
@@ -113,5 +126,6 @@ export function buildHistoryStats(s: ApiSummary, nowMs: number): HistoryStats {
     hadPriorDipCycle: s.hadDipBeforePeg && s.lastAtPegTs !== null
                         ? (nowMs - s.lastAtPegTs) < REPEAT_DIP_WINDOW_MS
                         : null,
+    chronicCandleFraction: s.chronicCandleFraction,
   }
 }

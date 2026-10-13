@@ -7,7 +7,6 @@ import {
   MAX_POSITION_USD,
   MAX_TRADE_DAYS,
   SOURCE_DISAGREE_SPREAD_PCT,
-  CHRONIC_HOURS,
   FRESH_DIP_HOURS,
   FALLING_FAST_PCT,
   FALLING_PCT,
@@ -23,6 +22,7 @@ export interface HistoryStats {
   pctBelow7d: number | null;
   daysOfData: number | null;
   hadPriorDipCycle: boolean | null;
+  chronicCandleFraction: number | null;
 }
 
 export interface Evidence {
@@ -148,14 +148,14 @@ export function decide(evidence: Evidence): DecideResult {
     danger.score += 10;
     danger.reasons.push("No price history to check");
   } else {
-    isChronic = history.hoursOffPeg !== null && history.hoursOffPeg > CHRONIC_HOURS && depegPct >= DIP_ZONE_START_PCT;
+    isChronic = history.chronicCandleFraction !== null && history.chronicCandleFraction > 0.5 && depegPct >= DIP_ZONE_START_PCT;
     isFallingFast = history.change1hPct !== null && history.change1hPct <= -FALLING_FAST_PCT;
     isRepeatDip = history.hadPriorDipCycle === true;
 
     if (isChronic) {
       danger.score += 35;
       danger.reasons.push(
-        `Below peg for ${(history.hoursOffPeg! / 24).toFixed(1)} days — looks chronic, not a dip`
+        `Chronic: ${(history.chronicCandleFraction! * 100).toFixed(0)}% of 72h candles >0.5% below peg — not a dip`
       );
     }
 
