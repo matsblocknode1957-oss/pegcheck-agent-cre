@@ -60,7 +60,7 @@ export function buildDebateRequest(
     `- Take-profit: $${tpPrice} (within ${tpPct}% of peg)\n` +
     `- Stop-loss: approx. $${slPrice} at current price (${slPct}% below entry)\n` +
     `- Max hold: ${MAX_TRADE_DAYS} days\n` +
-    `- Chronic depeg guard: price off peg for more than ${CHRONIC_HOURS} h → AVOID\n` +
+    `- Chronic depeg guard: more than 50% of 72 h candles >0.5% below peg → AVOID\n` +
     `- Source-agreement guard: requires 2+ price sources within ${spreadPct}% spread of each other\n` +
     `- Repeat-dip guard: coin dipped, recovered to peg, then dips again within ${CHRONIC_HOURS} h → AVOID\n\n` +
     `Important for all three voices: never call any trade "risk-free" or claim "zero risk" — stablecoin trades always carry depeg risk.\n\n` +
