@@ -18,6 +18,7 @@ import {
 } from "viem"
 import { decide } from "./lib/agent/rules.js"
 import type { Evidence } from "./lib/agent/rules.js"
+import { getCoinTier } from "./lib/agent/config.js"
 import { summariseHistory, buildHistoryStats } from "./lib/agent/history.js"
 import type { HistoryEntry, ApiSummary } from "./lib/agent/history.js"
 import { buildDebateRequest, parseDebateResponse } from "./lib/agent/debate.js"
@@ -159,6 +160,7 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
   }
 
   const result = decide(evidence)
+  const coinTier = getCoinTier(evidence.coin)
 
   // ── Step 4: Log full report ──
   runtime.log("━━━ PegCheck Agent Report ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -169,6 +171,7 @@ const onCronTrigger = (runtime: Runtime<Config>): string => {
     `(diff ${(priceDiffPct * 100).toFixed(4)}%)`
   )
   runtime.log(`Decision                       : ${result.decision.toUpperCase()}`)
+  runtime.log(`Coin tier                      : ${coinTier}`)
   runtime.log(`Danger   score: ${result.danger.score}/100`)
   for (const r of result.danger.reasons) {
     runtime.log(`  [DANGER]  ${r}`)

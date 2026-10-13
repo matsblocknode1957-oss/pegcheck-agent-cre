@@ -12,6 +12,8 @@ import {
   FALLING_PCT,
   BOUNCE_PCT,
   MIN_HISTORY_DAYS,
+  getCoinTier,
+  REPEAT_DIP_MIN_DEPTH_BACKED_PCT,
 } from "./config.js";
 
 export interface HistoryStats {
@@ -92,6 +94,7 @@ export function decide(evidence: Evidence): DecideResult {
     history,
   } = evidence;
 
+  const coinTier = getCoinTier(evidence.coin);
   const depegPct = (peg - medianPrice) / peg;
   const sourceCount = Object.values(pricesBySource).length;
   const spread = priceSpread(pricesBySource);
@@ -150,7 +153,8 @@ export function decide(evidence: Evidence): DecideResult {
   } else {
     isChronic = history.chronicCandleFraction !== null && history.chronicCandleFraction > 0.5 && depegPct >= DIP_ZONE_START_PCT;
     isFallingFast = history.change1hPct !== null && history.change1hPct <= -FALLING_FAST_PCT;
-    isRepeatDip = history.hadPriorDipCycle === true;
+    isRepeatDip = history.hadPriorDipCycle === true &&
+      (coinTier === "STRICT" || depegPct >= REPEAT_DIP_MIN_DEPTH_BACKED_PCT);
 
     if (isChronic) {
       danger.score += 35;

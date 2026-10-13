@@ -13,4 +13,19 @@ export const FALLING_FAST_PCT = 0.01;
 export const FALLING_PCT = 0.005;
 export const BOUNCE_PCT = 0.003;
 export const MIN_HISTORY_DAYS = 2;
-export const RULES_VERSION = "v2";
+export const RULES_VERSION = "v3";
+
+export type CoinTier = "STRICT" | "BACKED"
+
+// STRICT: algorithmic, synthetic, or partly-backed — Rule B always applies.
+// BACKED: fiat-reserved or over-collateralised — Rule B only fires for deep dips.
+// Unknown coins default to STRICT (safer).
+const BACKED_COINS = new Set([
+  "usdc", "usdt", "pyusd", "rlusd", "fdusd", "usdp",
+  "tusd", "lusd", "bold", "mkusd", "crvusd", "gho", "usds",
+])
+export function getCoinTier(coin: string): CoinTier {
+  return BACKED_COINS.has(coin.toLowerCase()) ? "BACKED" : "STRICT"
+}
+
+export const REPEAT_DIP_MIN_DEPTH_BACKED_PCT = 0.015;  // 1.5% — Rule B threshold for BACKED coins
